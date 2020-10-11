@@ -217,8 +217,6 @@ mlx90393_res_t Adafruit_MLX90395::getResolution(void) {
 }
 
 bool Adafruit_MLX90395::setResolution(mlx90393_res_t resval) {
-  resval &= 0x3;
-
   _resolution = resval; // cache it
 
   Adafruit_BusIO_Register reg2 =

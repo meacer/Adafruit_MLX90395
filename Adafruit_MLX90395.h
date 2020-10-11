@@ -74,7 +74,7 @@ class Adafruit_MLX90395 : public Adafruit_Sensor {
   uint8_t command(uint8_t cmd);
   bool readRegister(uint8_t reg, uint16_t *data);
 
-  uint8_t _resolution = 0;
+  mlx90393_res_t _resolution = MLX90395_RES_17;
   uint8_t _gain = 0;
   float _uTLSB = 0;
   int32_t _sensorID = 90395;
