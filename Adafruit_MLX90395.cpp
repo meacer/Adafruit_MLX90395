@@ -42,6 +42,28 @@ bool Adafruit_MLX90395::begin_I2C(uint8_t i2c_addr, TwoWire *wire) {
   return _init();
 }
 
+/*!
+ *    @brief  Sets up the hardware and initializes hardware SPI
+ *    @param  cs_pin The arduino pin # connected to chip select
+ *    @param  theSPI The SPI object to be used for SPI connections.
+ *    @return True if initialization was successful, otherwise false.
+ */
+boolean Adafruit_MLX90395::begin_SPI(uint8_t cs_pin, SPIClass *theSPI) {
+  i2c_dev = NULL;
+  if (!spi_dev) {
+    _cspin = cs_pin;
+    spi_dev = new Adafruit_SPIDevice(cs_pin,
+                                     1000000,               // frequency
+                                     SPI_BITORDER_MSBFIRST, // bit order
+                                     SPI_MODE3,             // data mode
+                                     theSPI);
+  }
+  if (!spi_dev->begin()) {
+    return false;
+  }
+  return _init();
+}
+
 bool Adafruit_MLX90395::_init(void) {
   if (!exitMode())
     return false;
@@ -98,20 +120,34 @@ bool Adafruit_MLX90395::readData(float *x, float *y, float *z) {
  * @return True on command success
  */
 bool Adafruit_MLX90395::readMeasurement(float *x, float *y, float *z) {
-  uint8_t tx[1] = {0x80}; // Read memory command
   uint8_t rx[12] = {0};   // status, crc, X16, Y16, Z16, T16, V16
 
   /* Perform the transaction. */
   if (i2c_dev) {
+    uint8_t tx[1] = {0x80}; // Read memory command
     if (!i2c_dev->write_then_read(tx, 1, rx, 12)) {
       return false;
+    }    
+    // check status
+    // Serial.print("Status: "); Serial.println(rx[0], HEX);
+    if (rx[0] != MLX90395_STATUS_DRDY) {
+      Serial.print("I2C readMeasurement MLX90395_STATUS_DRDY failed, rx[0]: ");
+      Serial.println(rx[0]);
+      return false;
     }
-  }
-
-  // check status
-  // Serial.print("Status: "); Serial.println(rx[0], HEX);
-  if (rx[0] != MLX90395_STATUS_DRDY) {
-    return false;
+  } else {
+    // SPI RM command (0x40) is different than the I2C command (0x80).
+    uint8_t tx[1] = {MLX90395_REG_RM};
+    if (!spi_dev->write_then_read(tx, sizeof(tx), rx, sizeof(rx), 0x00)) {
+      return false;
+    }
+    // check status
+    // Serial.print("Status: "); Serial.println(rx[0], HEX);
+    // if ((rx[0] & 1) != MLX90395_STATUS_DRDY) {
+    //   Serial.print("SPI readMeasurement MLX90395_STATUS_DRDY failed, rx[0]: ");
+    //   Serial.println(rx[0]);
+    //   return false;
+    // }
   }
 
   int16_t xi, yi, zi;
@@ -138,7 +174,16 @@ bool Adafruit_MLX90395::readMeasurement(float *x, float *y, float *z) {
  * @return True if the operation succeeded, otherwise false.
  */
 bool Adafruit_MLX90395::reset(void) {
-  return (command(MLX90395_REG_RT) == MLX90395_STATUS_RESET);
+  if (i2c_dev) {
+    return (command(MLX90395_REG_RT) == MLX90395_STATUS_RESET);
+  }
+  
+  // RT does not return a status byte (page 22 of the datasheet revision 6.0),
+  // so just check if the write succeeded.
+  // TODO: We could probably use
+  // `transceive(tx, sizeof(tx), NULL, 0, 5) != MLX90395_STATUS_OK` here.
+  uint8_t tx[1] = {MLX90395_REG_RT};
+  return spi_dev->write_then_read(tx, sizeof(tx), NULL, 0, 0x00);
 }
 
 /**
@@ -147,9 +192,16 @@ bool Adafruit_MLX90395::reset(void) {
  */
 bool Adafruit_MLX90395::exitMode(void) {
   // do once and ignore status
-  command(MLX90395_REG_EX);
+  if (i2c_dev) {
+    command(MLX90395_REG_EX);
+    return;
+  } 
 
-  return command(MLX90395_REG_EX) == 0;
+  uint8_t tx[1] = {MLX90395_REG_EX};
+  /* Perform the transaction. */
+  transceive(tx, sizeof(tx), NULL, 0, 0);
+  /* Perform the transaction again. */
+  return transceive(tx, sizeof(tx), NULL, 0, 0) == MLX90395_STATUS_OK;
 }
 
 /**
@@ -158,7 +210,17 @@ bool Adafruit_MLX90395::exitMode(void) {
  * @return True on command success
  */
 bool Adafruit_MLX90395::startSingleMeasurement(void) {
-  return (command(MLX90395_REG_SM | 0x0F) == MLX90395_STATUS_SMMODE);
+  if (i2c_dev) {
+    return (command(MLX90395_REG_SM | MLX90395_AXIS_ALL) == MLX90395_STATUS_SMMODE);
+  }
+  
+  /* Set the device to single measurement mode */
+  uint8_t tx[1] = {MLX90395_REG_SM | MLX90395_AXIS_ALL};
+  uint8_t stat = transceive(tx, sizeof(tx), NULL, 0, 0);
+  if ((stat == MLX90395_STATUS_OK) || (stat == MLX90395_STATUS_SMMODE)) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -166,11 +228,15 @@ bool Adafruit_MLX90395::startSingleMeasurement(void) {
  * @return MLX90395_OSR_1, MLX90395_OSR_2, MLX90395_OSR_4, or MLX90395_OSR_8
  */
 mlx90393_osr_t Adafruit_MLX90395::getOSR(void) {
-  Adafruit_BusIO_Register reg2 =
-      Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_2, 2, MSBFIRST);
-  Adafruit_BusIO_RegisterBits osr_bits =
-      Adafruit_BusIO_RegisterBits(&reg2, 2, 0);
-  return (mlx90393_osr_t)osr_bits.read();
+  if (i2c_dev) {
+    Adafruit_BusIO_Register reg2 =
+        Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_2, 2, MSBFIRST);
+    Adafruit_BusIO_RegisterBits osr_bits =
+        Adafruit_BusIO_RegisterBits(&reg2, 2, 0);
+    return (mlx90393_osr_t)osr_bits.read();
+  }
+  // TODO: Implement for SPI.
+  return MLX90395_OSR_1;
 }
 
 /**
@@ -180,11 +246,15 @@ mlx90393_osr_t Adafruit_MLX90395::getOSR(void) {
  * @return True on command success
  */
 bool Adafruit_MLX90395::setOSR(mlx90393_osr_t osrval) {
-  Adafruit_BusIO_Register reg2 =
-      Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_2, 2, MSBFIRST);
-  Adafruit_BusIO_RegisterBits osr_bits =
-      Adafruit_BusIO_RegisterBits(&reg2, 2, 0);
-  return osr_bits.write(osrval);
+  if (i2c_dev) {
+    Adafruit_BusIO_Register reg2 =
+        Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_2, 2, MSBFIRST);
+    Adafruit_BusIO_RegisterBits osr_bits =
+        Adafruit_BusIO_RegisterBits(&reg2, 2, 0);
+    return osr_bits.write(osrval);
+  }
+  // TODO: Implement for SPI.
+  return false;
 }
 
 /**
@@ -192,11 +262,19 @@ bool Adafruit_MLX90395::setOSR(mlx90393_osr_t osrval) {
  * @return 0-15 gain selection offset
  */
 uint8_t Adafruit_MLX90395::getGain(void) {
-  Adafruit_BusIO_Register reg0 =
-      Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_0, 2, MSBFIRST);
-  Adafruit_BusIO_RegisterBits gain_bits =
-      Adafruit_BusIO_RegisterBits(&reg0, 4, 4);
-  return gain_bits.read();
+  if (i2c_dev) {
+    Adafruit_BusIO_Register reg0 =
+        Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_0, 2, MSBFIRST);
+    Adafruit_BusIO_RegisterBits gain_bits =
+        Adafruit_BusIO_RegisterBits(&reg0, 4, 4);
+    return gain_bits.read();
+  } 
+  // SPI:
+  uint16_t gain;
+  readRegisterSPI(MLX90395_REG_0, &gain);
+  // mask off gain bits
+  gain &= 0x0070;
+  return gain >> MLX90395_GAIN_SHIFT;
 }
 
 /**
@@ -208,11 +286,15 @@ bool Adafruit_MLX90395::setGain(uint8_t gainval) {
   gainval &= 0xF;
   _gain = gainval; // cache it
 
-  Adafruit_BusIO_Register reg0 =
-      Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_0, 2, MSBFIRST);
-  Adafruit_BusIO_RegisterBits gain_bits =
-      Adafruit_BusIO_RegisterBits(&reg0, 4, 4);
-  return gain_bits.write(gainval);
+  if (i2c_dev) {
+    Adafruit_BusIO_Register reg0 =
+        Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_0, 2, MSBFIRST);
+    Adafruit_BusIO_RegisterBits gain_bits =
+        Adafruit_BusIO_RegisterBits(&reg0, 4, 4);
+    return gain_bits.write(gainval);
+  }
+  // TODO: Implement for SPI.
+  return false;
 }
 
 /**
@@ -222,11 +304,15 @@ bool Adafruit_MLX90395::setGain(uint8_t gainval) {
  *  MLX90395_RES_19
  */
 mlx90393_res_t Adafruit_MLX90395::getResolution(void) {
-  Adafruit_BusIO_Register reg2 =
-      Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_2, 2, MSBFIRST);
-  Adafruit_BusIO_RegisterBits resX_bits =
-      Adafruit_BusIO_RegisterBits(&reg2, 2, 5);
-  return (mlx90393_res_t)resX_bits.read();
+  if (i2c_dev) {
+    Adafruit_BusIO_Register reg2 =
+        Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_2, 2, MSBFIRST);
+    Adafruit_BusIO_RegisterBits resX_bits =
+        Adafruit_BusIO_RegisterBits(&reg2, 2, 5);
+    return (mlx90393_res_t)resX_bits.read();
+  }
+  // TODO: Implement for SPI.
+  return MLX90395_RES_19;
 }
 
 /**
@@ -239,17 +325,21 @@ mlx90393_res_t Adafruit_MLX90395::getResolution(void) {
 bool Adafruit_MLX90395::setResolution(mlx90393_res_t resval) {
   _resolution = resval; // cache it
 
-  Adafruit_BusIO_Register reg2 =
-      Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_2, 2, MSBFIRST);
-  Adafruit_BusIO_RegisterBits resX_bits =
-      Adafruit_BusIO_RegisterBits(&reg2, 2, 5);
-  resX_bits.write(resval);
-  Adafruit_BusIO_RegisterBits resY_bits =
-      Adafruit_BusIO_RegisterBits(&reg2, 2, 7);
-  resY_bits.write(resval);
-  Adafruit_BusIO_RegisterBits resZ_bits =
-      Adafruit_BusIO_RegisterBits(&reg2, 2, 9);
-  return resZ_bits.write(resval);
+  if (i2c_dev) {
+    Adafruit_BusIO_Register reg2 =
+        Adafruit_BusIO_Register(i2c_dev, MLX90395_REG_2, 2, MSBFIRST);
+    Adafruit_BusIO_RegisterBits resX_bits =
+        Adafruit_BusIO_RegisterBits(&reg2, 2, 5);
+    resX_bits.write(resval);
+    Adafruit_BusIO_RegisterBits resY_bits =
+        Adafruit_BusIO_RegisterBits(&reg2, 2, 7);
+    resY_bits.write(resval);
+    Adafruit_BusIO_RegisterBits resZ_bits =
+        Adafruit_BusIO_RegisterBits(&reg2, 2, 9);
+    return resZ_bits.write(resval);
+  }
+  // TODO: Implement for SPI.
+  return false;
 }
 
 /****************************************************************/
@@ -274,8 +364,21 @@ bool Adafruit_MLX90395::readRegister(uint8_t reg, uint16_t *data) {
     Adafruit_BusIO_Register regis =
         Adafruit_BusIO_Register(i2c_dev, reg << 1, 2);
     *data = regis.read();
+    return true;
   }
+  return readRegisterSPI(reg, data);
+}
 
+bool Adafruit_MLX90395::readRegisterSPI(uint8_t reg, uint16_t *data) {
+  uint8_t tx[2] = {MLX90395_REG_RR,
+                   reg << 2}; // the register itself, shift up by 2 bits!
+  uint8_t rx[2];
+
+  /* Perform the transaction. */
+  if (transceive(tx, sizeof(tx), rx, sizeof(rx), 0) != MLX90395_STATUS_OK) {
+    return false;
+  }
+  *data = ((uint16_t)rx[0] << 8) | rx[1];
   return true;
 }
 
@@ -320,4 +423,57 @@ bool Adafruit_MLX90395::getEvent(sensors_event_t *event) {
   event->timestamp = millis();
 
   return readData(&event->magnetic.x, &event->magnetic.y, &event->magnetic.z);
+}
+
+/**
+ * Performs a full read/write transaction with the sensor.
+ *
+ * @param txbuf     Pointer the the buffer containing the data to write.
+ * @param txlen     The number of bytes to write.
+ * @param rxbuf     Pointer to an appropriately large buffer where data read
+ *                  back will be written.
+ * @param rxlen     The number of bytes to read back (not including the
+ *                  mandatory status byte that is always returned).
+ *
+ * @return The status byte from the IC.
+ */
+uint8_t Adafruit_MLX90395::transceive(uint8_t *txbuf, uint8_t txlen,
+                                      uint8_t *rxbuf, uint8_t rxlen,
+                                      uint8_t interdelay) {
+  uint8_t status = 0;
+  uint8_t i;
+  uint8_t rxbuf2[rxlen + 2] = {0};
+
+  if (i2c_dev) {
+    /* Write stage */
+    if (!i2c_dev->write(txbuf, txlen)) {
+      return MLX90395_STATUS_ERROR;
+    }
+    delay(interdelay);
+
+    /* Read status byte plus any others */
+    if (!i2c_dev->read(rxbuf2, rxlen + 1)) {
+      return MLX90395_STATUS_ERROR;
+    }
+    status = rxbuf2[0];
+    for (i = 0; i < rxlen; i++) {
+      rxbuf[i] = rxbuf2[i + 1];
+    }
+  }
+
+  if (spi_dev) {
+
+    spi_dev->write_then_read(txbuf, txlen, rxbuf2, rxlen + 1, 0x00);
+    status = rxbuf2[0];
+    // Serial.print("STATIS: ");
+    // Serial.println(status);
+    for (i = 0; i < rxlen; i++) {
+      rxbuf[i] = rxbuf2[i + 1];
+    }
+
+    delay(interdelay);
+  }
+
+  /* Mask out bytes available in the status response. */
+  return (status >> 2);
 }
