@@ -70,7 +70,9 @@ public:
   Adafruit_MLX90395();
   bool begin_I2C(uint8_t i2c_addr = MLX90395_DEFAULT_ADDR,
                  TwoWire *wire = &Wire);
-  bool begin_SPI(uint8_t cs_pin, SPIClass *theSPI = &SPI);
+  bool begin_SPI(uint8_t cs_pin,
+                 uint32_t frequency = 1000000,
+                 SPIClass *theSPI = &SPI);
 
   bool reset(void);
   bool exitMode(void);

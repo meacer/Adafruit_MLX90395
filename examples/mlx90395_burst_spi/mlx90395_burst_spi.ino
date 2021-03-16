@@ -3,22 +3,23 @@
 Adafruit_MLX90395 sensor = Adafruit_MLX90395();
 #define MLX90395_CS 10
 
+#define SPI_SPEED 5000000
+
 unsigned long last_time;
 int counter = 0;
 
 void setup(void)
 {
-  Serial.begin(115200);
+  Serial.begin(500000);
 
   /* Wait for serial on USB platforms. */
   while (!Serial) {
       delay(10);
   }
 
-  Serial.println("Starting Adafruit MLX90395 Demo");
+  Serial.println("Starting Adafruit MLX90395 Demo in burst mode using SPI");
   
-//  if (! sensor.begin_I2C()) {          // hardware I2C mode, can pass in address & alt Wire
-  if (! sensor.begin_SPI(MLX90395_CS)) {  // hardware SPI mode
+  if (! sensor.begin_SPI(MLX90395_CS, SPI_SPEED)) {
     Serial.println("No sensor found ... check your wiring?");
     while (1) { delay(10); }
   }
@@ -27,7 +28,7 @@ void setup(void)
   Serial.print(sensor.uniqueID[1], HEX);
   Serial.println(sensor.uniqueID[2], HEX);
 
-  sensor.setOSR(MLX90395_OSR_8);
+  sensor.setOSR(MLX90395_OSR_1);
   Serial.print("OSR set to: ");
   switch (sensor.getOSR()) {
     case MLX90395_OSR_1: Serial.println("1 x"); break;
@@ -36,7 +37,7 @@ void setup(void)
     case MLX90395_OSR_8: Serial.println("8 x"); break;
   }
   
-  sensor.setResolution(MLX90395_RES_17);
+  sensor.setResolution(MLX90395_RES_16);
   Serial.print("Resolution: ");
   switch (sensor.getResolution()) {
     case MLX90395_RES_16: Serial.println("16b"); break;
@@ -55,7 +56,8 @@ void loop(void) {
   counter++;
   float x, y, z;
 
-  // get X Y and Z data at once
+  // Get X Y and Z data at once. Should get around 800 measurements per second
+  // on an Arduino Uno.
   if (sensor.readMeasurement(&x, &y, &z)) {
     if (counter % 100 == 0) {
       unsigned long now = micros();
