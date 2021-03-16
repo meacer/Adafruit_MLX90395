@@ -223,6 +223,17 @@ bool Adafruit_MLX90395::startSingleMeasurement(void) {
   return false;
 }
 
+bool Adafruit_MLX90395::startBurstMeasurement(void) {
+  uint8_t tx[1] = {MLX90395_REG_SB | MLX90395_AXIS_ALL};
+
+  /* Set the device to burst measurement mode */
+  uint8_t stat = transceive(tx, sizeof(tx), NULL, 0, 0);
+  if ((stat == MLX90395_STATUS_OK) || (stat == MLX90395_STATUS_SMMODE)) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Get the current oversampling setting
  * @return MLX90395_OSR_1, MLX90395_OSR_2, MLX90395_OSR_4, or MLX90395_OSR_8

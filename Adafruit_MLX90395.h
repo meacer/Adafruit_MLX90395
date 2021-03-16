@@ -75,6 +75,7 @@ public:
   bool reset(void);
   bool exitMode(void);
   bool startSingleMeasurement(void);
+  bool startBurstMeasurement(void);
   bool readMeasurement(float *x, float *y, float *z);
   bool readData(float *x, float *y, float *z);
 
