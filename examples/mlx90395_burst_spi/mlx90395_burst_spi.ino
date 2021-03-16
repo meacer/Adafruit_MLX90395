@@ -18,7 +18,13 @@ void setup(void)
   }
 
   Serial.println("Starting Adafruit MLX90395 Demo in burst mode using SPI");
-  
+
+  // To keep the measurements fast, set the following:
+  // - A high SPI frequency
+  // - Low oversampling
+  // - Low resolution
+  // These settings should return around 5150 measurements per
+  // second on an Arduino Uno.
   if (! sensor.begin_SPI(MLX90395_CS, SPI_SPEED)) {
     Serial.println("No sensor found ... check your wiring?");
     while (1) { delay(10); }
@@ -51,17 +57,15 @@ void setup(void)
   sensor.startBurstMeasurement();
 }
 
-
 void loop(void) {
   counter++;
   float x, y, z;
 
-  // Get X Y and Z data at once. Should get around 800 measurements per second
-  // on an Arduino Uno.
+  // Get X Y and Z data at once. 
   if (sensor.readMeasurement(&x, &y, &z)) {
-    if (counter % 100 == 0) {
+    if (counter == 1000) {
       unsigned long now = micros();
-      int fps = counter * 1000000 / (now - last_time);
+      int fps = 1000000 * counter / (now - last_time);
       counter = 0;
       last_time = now;
       Serial.print("Measurements per second: "); Serial.print(fps);
@@ -82,7 +86,4 @@ void loop(void) {
 //  Serial.print(" \tY: "); Serial.print(event.magnetic.y); 
 //  Serial.print(" \tZ: "); Serial.print(event.magnetic.z); 
 //  Serial.println(" uTesla ");
-
-  // Need a delay, otherwise reading fails.
-  delay(1);
 }
