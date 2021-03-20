@@ -20,7 +20,12 @@
 #define MLX90395_STATUS_ERROR (0xFF)  /**< OK value for status response. */
 #define MLX90395_STATUS_MASK (0xFC)   /**< Mask for status OK checks. */
 
+#define MLX90395_AXIS_T (0x01)
+#define MLX90395_AXIS_X (0x02)
+#define MLX90395_AXIS_Y (0x04)
+#define MLX90395_AXIS_Z (0x08)
 #define MLX90395_AXIS_ALL (0x0F)      /**< T+X+Y+Z axis bits for commands. */
+
 #define MLX90395_CONF1 (0x00)         /**< Gain */
 #define MLX90395_CONF2 (0x01)         /**< Burst, comm mode */
 #define MLX90395_CONF3 (0x02)         /**< Oversampling, filter, res. */
@@ -77,7 +82,7 @@ public:
   bool reset(void);
   bool exitMode(void);
   bool startSingleMeasurement(void);
-  bool startBurstMeasurement(void);
+  bool startBurstMeasurement(uint8_t axis = MLX90395_AXIS_ALL);
   bool readMeasurement(float *x, float *y, float *z);
   bool readData(float *x, float *y, float *z);
 

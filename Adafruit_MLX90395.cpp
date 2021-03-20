@@ -194,7 +194,8 @@ bool Adafruit_MLX90395::exitMode(void) {
   // do once and ignore status
   if (i2c_dev) {
     command(MLX90395_REG_EX);
-    return;
+    // TODO: Return command == MLX90395_STATUS_OK?
+    return true;
   } 
 
   uint8_t tx[1] = {MLX90395_REG_EX};
@@ -223,8 +224,8 @@ bool Adafruit_MLX90395::startSingleMeasurement(void) {
   return false;
 }
 
-bool Adafruit_MLX90395::startBurstMeasurement(void) {
-  uint8_t tx[1] = {MLX90395_REG_SB | MLX90395_AXIS_ALL};
+bool Adafruit_MLX90395::startBurstMeasurement(uint8_t axis) {
+  uint8_t tx[1] = {MLX90395_REG_SB | axis};
 
   /* Set the device to burst measurement mode */
   uint8_t stat = transceive(tx, sizeof(tx), NULL, 0, 0);
