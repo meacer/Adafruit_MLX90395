@@ -30,6 +30,7 @@
 #define MLX90395_CONF2 (0x01)         /**< Burst, comm mode */
 #define MLX90395_CONF3 (0x02)         /**< Oversampling, filter, resolution. */
 #define MLX90395_CONF4 (0x03)         /**< Sensitivty drift. */
+#define MLX90395_OSR_SHIFT (0)        /**< Left-shift for OSR bits. */
 #define MLX90395_GAIN_SHIFT (4)       /**< Left-shift for gain bits. */
 #define MLX90395_RESOLUTION_SHIFT (5) /**< Left-shift for resolution bits. */
 #define MLX90395_HALL_CONF (0x0C)     /**< Hall plate spinning rate adj. */

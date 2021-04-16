@@ -247,8 +247,11 @@ mlx90393_osr_t Adafruit_MLX90395::getOSR(void) {
         Adafruit_BusIO_RegisterBits(&reg2, 2, 0);
     return (mlx90393_osr_t)osr_bits.read();
   }
-  // TODO: Implement for SPI.
-  return MLX90395_OSR_1;
+  // SPI:
+  uint16_t data = 0;
+  readRegisterSPI(MLX90395_CONF3, &data);
+  data = (data >> MLX90395_OSR_SHIFT);
+  return (mlx90393_osr_t) (data & 0b11);
 }
 
 /**
@@ -265,8 +268,11 @@ bool Adafruit_MLX90395::setOSR(mlx90393_osr_t osrval) {
         Adafruit_BusIO_RegisterBits(&reg2, 2, 0);
     return osr_bits.write(osrval);
   }
-  // TODO: Implement for SPI.
-  return false;
+  // SPI:
+  uint16_t data = 0;
+  data &= ~(0b11 << MLX90395_OSR_SHIFT);
+  data |= osrval << MLX90395_OSR_SHIFT;
+  return writeRegisterSPI(MLX90395_CONF3, data);
 }
 
 /**
