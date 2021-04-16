@@ -28,9 +28,10 @@
 
 #define MLX90395_CONF1 (0x00)         /**< Gain */
 #define MLX90395_CONF2 (0x01)         /**< Burst, comm mode */
-#define MLX90395_CONF3 (0x02)         /**< Oversampling, filter, res. */
+#define MLX90395_CONF3 (0x02)         /**< Oversampling, filter, resolution. */
 #define MLX90395_CONF4 (0x03)         /**< Sensitivty drift. */
 #define MLX90395_GAIN_SHIFT (4)       /**< Left-shift for gain bits. */
+#define MLX90395_RESOLUTION_SHIFT (5) /**< Left-shift for resolution bits. */
 #define MLX90395_HALL_CONF (0x0C)     /**< Hall plate spinning rate adj. */
 
 /** Register map. */
@@ -38,9 +39,9 @@ enum {
   MLX90395_REG_SB = (0x10),  /**< Start burst mode. */
   MLX90395_REG_SW = (0x20),  /**< Start wakeup on change mode. */
   MLX90395_REG_SM = (0x30),  /**> Start single-meas mode. */
-  MLX90395_REG_RM = (0x40),  /**> Read measurement. */
-  MLX90395_REG_RR = (0x50),  /**< Read register. */
-  MLX90395_REG_WR = (0x60),  /**< Write register. */
+  MLX90395_REG_RM = (0x40),  /**> Read measurement (SPI). */
+  MLX90395_REG_RR = (0x50),  /**< Read register (SPI). */
+  MLX90395_REG_WR = (0x60),  /**< Write register (SPI). */
   MLX90395_REG_EX = (0x80),  /**> Exit mode. */
   MLX90395_REG_RV = (0xC0),  /**> Read voltage. */
   MLX90395_REG_HR = (0xD0),  /**< Memory recall. */
@@ -107,8 +108,10 @@ private:
   bool readRegister(uint8_t reg, uint16_t *data);
   bool readRegisterSPI(uint8_t reg, uint16_t *data);
 
+  bool writeRegisterSPI(uint8_t reg, uint16_t data);
+
   uint8_t transceive(uint8_t *txbuf, uint8_t txlen, uint8_t *rxbuf = NULL,
-                     uint8_t rxlen = 0, uint8_t interdelay = 10); 
+                     uint8_t rxlen = 0, uint8_t interdelay = 10);
 
   mlx90393_res_t _resolution = MLX90395_RES_17;
   uint8_t _gain = 0;

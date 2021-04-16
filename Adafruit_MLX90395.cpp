@@ -127,7 +127,7 @@ bool Adafruit_MLX90395::readMeasurement(float *x, float *y, float *z) {
     uint8_t tx[1] = {0x80}; // Read memory command
     if (!i2c_dev->write_then_read(tx, 1, rx, 12)) {
       return false;
-    }    
+    }
     // check status
     // Serial.print("Status: "); Serial.println(rx[0], HEX);
     if (rx[0] != MLX90395_STATUS_DRDY) {
@@ -177,7 +177,7 @@ bool Adafruit_MLX90395::reset(void) {
   if (i2c_dev) {
     return (command(MLX90395_REG_RT) == MLX90395_STATUS_RESET);
   }
-  
+
   // RT does not return a status byte (page 22 of the datasheet revision 6.0),
   // so just check if the write succeeded.
   // TODO: We could probably use
@@ -196,7 +196,7 @@ bool Adafruit_MLX90395::exitMode(void) {
     command(MLX90395_REG_EX);
     // TODO: Return command == MLX90395_STATUS_OK?
     return true;
-  } 
+  }
 
   uint8_t tx[1] = {MLX90395_REG_EX};
   /* Perform the transaction. */
@@ -214,7 +214,7 @@ bool Adafruit_MLX90395::startSingleMeasurement(void) {
   if (i2c_dev) {
     return (command(MLX90395_REG_SM | MLX90395_AXIS_ALL) == MLX90395_STATUS_SMMODE);
   }
-  
+
   /* Set the device to single measurement mode */
   uint8_t tx[1] = {MLX90395_REG_SM | MLX90395_AXIS_ALL};
   uint8_t stat = transceive(tx, sizeof(tx), NULL, 0, 0);
@@ -280,7 +280,7 @@ uint8_t Adafruit_MLX90395::getGain(void) {
     Adafruit_BusIO_RegisterBits gain_bits =
         Adafruit_BusIO_RegisterBits(&reg0, 4, 4);
     return gain_bits.read();
-  } 
+  }
   // SPI:
   uint16_t gain;
   readRegisterSPI(MLX90395_REG_0, &gain);
@@ -323,8 +323,12 @@ mlx90393_res_t Adafruit_MLX90395::getResolution(void) {
         Adafruit_BusIO_RegisterBits(&reg2, 2, 5);
     return (mlx90393_res_t)resX_bits.read();
   }
-  // TODO: Implement for SPI.
-  return MLX90395_RES_19;
+  // SPI:
+  uint16_t data = 0;
+  readRegisterSPI(MLX90395_CONF3, &data);
+  data = (data >> MLX90395_RESOLUTION_SHIFT);
+  // Only return the value for X axis because all axes have the same resolution.
+  return (mlx90393_res_t) (data & 0b11);
 }
 
 /**
@@ -350,8 +354,19 @@ bool Adafruit_MLX90395::setResolution(mlx90393_res_t resval) {
         Adafruit_BusIO_RegisterBits(&reg2, 2, 9);
     return resZ_bits.write(resval);
   }
-  // TODO: Implement for SPI.
-  return false;
+
+  // SPI:
+  uint16_t data = 0;
+  // X axis:
+  data &= ~(0b11 << MLX90395_RESOLUTION_SHIFT);
+  data |= resval << MLX90395_RESOLUTION_SHIFT;
+  // Y axis:
+  data &= ~(0b11 << (MLX90395_RESOLUTION_SHIFT + 2));
+  data |= resval << (MLX90395_RESOLUTION_SHIFT + 2);
+  // Z axis:
+  data &= ~(0b11 << (MLX90395_RESOLUTION_SHIFT + 4));
+  data |= resval << (MLX90395_RESOLUTION_SHIFT + 4);
+  return writeRegisterSPI(MLX90395_CONF3, data);
 }
 
 /****************************************************************/
@@ -392,6 +407,16 @@ bool Adafruit_MLX90395::readRegisterSPI(uint8_t reg, uint16_t *data) {
   }
   *data = ((uint16_t)rx[0] << 8) | rx[1];
   return true;
+}
+
+bool Adafruit_MLX90395::writeRegisterSPI(uint8_t reg, uint16_t data) {
+  uint8_t tx[4] = {MLX90395_REG_WR,
+                   data >> 8,   // high byte
+                   data & 0xFF, // low byte
+                   reg << 2};   // the register itself, shift up by 2 bits!
+
+  /* Perform the transaction. */
+  return (transceive(tx, sizeof(tx), NULL, 0, 0) == MLX90395_STATUS_OK);
 }
 
 /**************************************************************************/
