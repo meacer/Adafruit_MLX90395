@@ -311,8 +311,11 @@ bool Adafruit_MLX90395::setGain(uint8_t gainval) {
         Adafruit_BusIO_RegisterBits(&reg0, 4, 4);
     return gain_bits.write(gainval);
   }
-  // TODO: Implement for SPI.
-  return false;
+  // SPI:
+  uint16_t data = 0;
+  data &= ~(0b1111 << MLX90395_GAIN_SHIFT);
+  data |= gainval << MLX90395_GAIN_SHIFT;
+  return writeRegisterSPI(MLX90395_REG_0, data);
 }
 
 /**
